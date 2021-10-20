@@ -2,15 +2,19 @@
 
 import argparse
 import inspect
+import io
+import json
 import os
 import requests
 import urllib
+import re
 import shutil
 import subprocess
 import sys
 
 from contextlib import suppress
 from pathlib import Path
+from zipfile import ZipFile
 
 user_chrome_contents = inspect.cleandoc(
     """
@@ -78,17 +82,69 @@ class SsbFirefox:
         return self.config_path / "profile"
 
     def generate_profile(self):
-        user_chrome = self.profile_path.joinpath("chrome", "userChrome.css")
-        if not user_chrome.exists():
-            user_chrome.parent.mkdir(parents=True, exist_ok=True)
-            with open(user_chrome, "w") as f:
-                f.write(user_chrome_contents)
+        self.make_user_css()
+        self.make_user_js()
+        self.install_ublock_origin()
 
+    def make_user_css(self):
+        user_chrome = self.profile_path.joinpath("chrome", "userChrome.css")
+        if user_chrome.exists():
+            return
+
+        user_chrome.parent.mkdir(parents=True, exist_ok=True)
+        with open(user_chrome, "w") as f:
+            f.write(user_chrome_contents)
+
+    def make_user_js(self):
         user_js = self.profile_path.joinpath("user.js")
-        if not user_js.exists():
-            user_js.parent.mkdir(parents=True, exist_ok=True)
-            with open(user_js, "w") as f:
-                f.write(user_js_contents)
+        if user_js.exists():
+            return
+
+        user_js.parent.mkdir(parents=True, exist_ok=True)
+        with open(user_js, "w") as f:
+            f.write(user_js_contents)
+
+    def install_ublock_origin(self):
+        # Look for a sentinel file instead of the extension itself,
+        # because we don't know the name of the .xpi file without
+        # first downloading it and checking manifest.json.
+        sentinel_file = self.profile_path.joinpath(
+            "extensions", "ublock_origin_installed"
+        )
+        if sentinel_file.exists():
+            return
+
+        # First, look in the addon page to find the correct URL.
+        addon_url = "https://addons.mozilla.org/en-US/firefox/addon/ublock-origin/"
+        res = requests.get(addon_url)
+        res.raise_for_status()
+
+        html = res.content.decode("utf-8")
+        for match in re.finditer('href="(?P<link>.*?)"', html):
+            link = match.group("link")
+            if link.endswith(".xpi") and "ublock" in link:
+                break
+        else:
+            raise RuntimeError("Could not find .xpi file for ublock origin")
+
+        # Next, download the .xpi for the extension.
+        res = requests.get(link)
+        res.raise_for_status()
+
+        # Read the manifest.json to determine where it needs to be saved.
+        with io.BytesIO(res.content) as data_file:
+            zipfile = ZipFile(data_file)
+            manifest = json.loads(zipfile.read("manifest.json").decode("utf-8"))
+            extension_id = manifest["browser_specific_settings"]["gecko"]["id"]
+
+        # Then save the .xpi file in the location given.
+        ublock_origin_xpi = sentinel_file.with_name(extension_id + ".xpi")
+        ublock_origin_xpi.parent.mkdir(parents=True, exist_ok=True)
+        with open(ublock_origin_xpi, "wb") as f:
+            f.write(res.content)
+
+        with open(sentinel_file, "w") as f:
+            pass
 
     def download_icon(self):
         favicon = self.favicon_path
