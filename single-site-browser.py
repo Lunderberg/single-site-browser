@@ -133,18 +133,23 @@ class SsbFirefox:
         return self.config_path / "application-menu-item.desktop"
 
     def generate_desktop_file(self):
-        relpath = os.path.relpath(self.desktop_file, self.desktop_file_symlink.parent)
-        if self.desktop_file_symlink.exists():
-            # Don't overwrite an existing file, or an existing symlink
+        symlink = self.desktop_file_symlink
+        target = self.desktop_file
+        relpath = os.path.relpath(target, symlink.parent)
+
+        if symlink.is_symlink():
+            # Don't overwrite an existing symlink
             # that points somewhere else.
-            if self.desktop_file_symlink.resolve() != self.desktop_file:
-                raise FileExistsError(self.desktop_file_symlink)
+            if symlink.resolve() != target:
+                raise FileExistsError(symlink)
+        elif symlink.exists():
+            raise FileExistsError(symlink)
         else:
-            os.symlink(relpath, self.desktop_file_symlink)
+            symlink.symlink_to(relpath)
 
         self.generate_profile()
         self.download_icon()
-        with open(self.desktop_file, "w") as f:
+        with open(target, "w") as f:
             f.write(
                 desktop_file_contents.format(
                     name=self.name,
