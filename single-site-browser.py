@@ -216,6 +216,9 @@ class SsbFirefox:
                 )
             )
 
+    def reload_desktop_files(self):
+        subprocess.check_call(['update-desktop-database', str(self.desktop_file_symlink.parent)])
+
     def clean(self):
         with suppress(FileNotFoundError):
             shutil.rmtree(self.config_path)
@@ -235,6 +238,7 @@ def main(args):
 
     if args.mode == "application-menu":
         ssb.generate_desktop_file()
+        ssb.reload_desktop_files()
     elif args.mode == "run":
         ssb.run()
     elif args.mode == "clean":
