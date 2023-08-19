@@ -18,9 +18,9 @@ from zipfile import ZipFile
 
 user_chrome_contents = inspect.cleandoc(
     """
-    #nav-bar, #identity-box, #tabbrowser-tabs, #TabsToolbar {
-        visibility: collapse !important;
-    }
+    /* #nav-bar, #identity-box, #tabbrowser-tabs, #TabsToolbar { */
+    /*     visibility: collapse !important;                      */
+    /* }                                                         */
     """
 )
 
